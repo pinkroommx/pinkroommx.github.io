@@ -1326,15 +1326,10 @@
   function openProduct(id){
     const p = PRODUCTS.find(x => x.id === id);
     if(!p) return;
-    productCameFromCategory = document.getElementById('categoryModal').classList.contains('show');
+    productCameFromCategory = false;
     const closeBtn = document.getElementById('productCloseBtn');
-    if(productCameFromCategory){
-      closeBtn.innerHTML = '← Atrás';
-      closeBtn.classList.add('as-back');
-    } else {
-      closeBtn.innerHTML = '✕';
-      closeBtn.classList.remove('as-back');
-    }
+    closeBtn.innerHTML = '✕';
+    closeBtn.classList.remove('as-back');
     document.getElementById('productPhoto').src = p.img;
     document.getElementById('productPhoto').alt = p.name;
     document.getElementById('productCat').textContent = p.cat + (p.sub ? ' · '+p.sub : '');
@@ -1381,10 +1376,8 @@
 
   function closeProduct(){
     document.getElementById('productModal').classList.remove('show');
-    if(!productCameFromCategory){
-      document.getElementById('overlay').classList.remove('show');
-    }
-    // si venía de una categoría, esa ventana sigue abierta debajo — no se toca
+    document.getElementById('categoryModal').classList.remove('show');
+    document.getElementById('overlay').classList.remove('show');
   }
 
   /* ---------------- CART LOGIC ---------------- */
