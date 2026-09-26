@@ -268,6 +268,14 @@
   .spec-row:last-child{border-bottom:none;}
   .spec-row .k{color:#9a7883;flex-shrink:0;}
   .spec-row .v{color:var(--ink);text-align:right;font-weight:500;}
+  .product-options{margin-top:18px;background:var(--blush-50);border-radius:14px;padding:14px 16px;}
+  .product-option{margin-bottom:14px;}
+  .product-option:last-child{margin-bottom:0;}
+  .product-option label{display:block;font-size:.82rem;font-weight:600;color:var(--ink);margin-bottom:7px;}
+  .product-option select{background:#fff;cursor:pointer;}
+  .product-option .required-note{display:block;font-size:.7rem;color:#9a7883;margin-top:5px;}
+  .variant-badge{display:inline-flex;align-items:center;gap:5px;background:var(--blush-100);color:var(--wine-800);border-radius:999px;padding:4px 9px;font-size:.7rem;margin-top:5px;}
+  .line-options{font-size:.75rem;color:#7a5a63;line-height:1.45;margin-top:4px;}
   .pay-detail b{color:var(--ink);}
 
   .confirm-btn{width:100%;margin-top:26px;background:var(--wine-950);color:#fff;border:none;padding:16px;border-radius:999px;font-size:1rem;cursor:pointer;}
@@ -518,6 +526,7 @@
         <div class="price" id="productPrice" style="font-size:1.3rem;margin:8px 0 16px;color:var(--wine-800);"></div>
         <div class="section-label"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>Especificaciones</div>
         <div class="specs-list" id="productSpecs"></div>
+        <div id="productOptions" class="product-options hidden"></div>
         <button class="confirm-btn" id="productAddBtn" style="margin-top:20px;">Agregar al carrito</button>
       </div>
     </div>
@@ -1062,7 +1071,7 @@
   const SHIPPING_FREE_OVER = 500;
   const SHIPPING_COST = 79;
 
-  let cart = {};        // {productId: qty}
+  let cart = {};        // {"productId::variantes": qty}
   let entrega = 'domicilio';
   let pago = 'transferencia';
 
@@ -1078,7 +1087,7 @@
         <h3>${p.name}</h3>
         <div class="card-foot">
           <span class="price">$${p.price}</span>
-          <button class="add-btn" id="add-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})">Agregar</button>
+          <button class="add-btn" id="add-${p.id}" onclick="event.stopPropagation();openProduct(${p.id})">Elegir opciones</button>
         </div>
       </div>
     </div>`;
@@ -1335,8 +1344,37 @@
     document.getElementById('productSpecs').innerHTML = getSpecs(p).map(([k,v]) =>
       `<div class="spec-row"><span class="k">${k}</span><span class="v">${v}</span></div>`
     ).join('');
+
+    const optionsBox = document.getElementById('productOptions');
+    const variantConfig = getVariantConfig(p);
+    optionsBox.innerHTML = variantConfig.map((opt, index) => `
+      <div class="product-option">
+        <label for="productOption-${index}">${opt.label}</label>
+        <select id="productOption-${index}" data-option-key="${opt.key}">
+          <option value="">Selecciona una opción</option>
+          ${opt.options.map(v => `<option value="${v}">${v}</option>`).join('')}
+        </select>
+        <span class="required-note">Selecciona una opción antes de agregar el producto.</span>
+      </div>
+    `).join('');
+    optionsBox.classList.toggle('hidden', variantConfig.length === 0);
+
     const addBtn = document.getElementById('productAddBtn');
-    addBtn.onclick = () => { addToCart(p.id); closeAll(); openDrawer(); };
+    addBtn.onclick = () => {
+      const selected = {};
+      for(const opt of variantConfig){
+        const el = optionsBox.querySelector(`[data-option-key="${opt.key}"]`);
+        const value = el ? el.value : '';
+        if(!value){
+          el && el.focus();
+          return;
+        }
+        selected[opt.key] = value;
+      }
+      addToCart(p.id, selected);
+      closeAll();
+      openDrawer();
+    };
     document.getElementById('productModal').classList.add('show');
     document.getElementById('overlay').classList.add('show');
   }
@@ -1350,23 +1388,71 @@
   }
 
   /* ---------------- CART LOGIC ---------------- */
-  function addToCart(id){
-    cart[id] = (cart[id] || 0) + 1;
-    const btn = document.getElementById('add-'+id);
-    btn.textContent = 'Agregado ✓';
-    btn.classList.add('added');
-    setTimeout(()=>{ btn.textContent='Agregar'; btn.classList.remove('added'); }, 1100);
+  function getVariantConfig(p){
+    if(p.cat === 'Lencería'){
+      return [{key:'talla', label:'Talla', options:['Chica (S)','Mediana (M)','Grande (L)','Extra grande (XL)']}];
+    }
+    if(p.cat === 'Velas para masajes'){
+      return [{key:'aroma', label:'Aroma', options:['Vainilla','Rosas','Neutro']}];
+    }
+    if(p.cat === 'Comestibles'){
+      return [{key:'sabor', label:'Sabor', options:['Fresa','Chocolate','Neutro']}];
+    }
+    if(p.cat === 'Cremas Feromonas' && (p.sub === 'Feromonas para ellas' || p.sub === 'Feromonas para ellos')){
+      return [{key:'aroma', label:'Aroma', options:['Fresa','Chocolate','Neutro']}];
+    }
+    if(p.cat === 'Fragancia Erotica'){
+      return [{key:'aroma', label:'Aroma', options:['Fresa','Chocolate','Neutro']}];
+    }
+    if(toyColorCats().includes(p.cat)){
+      return [{key:'color', label:'Color', options:['Rosa','Negro','Morado']}];
+    }
+    if(p.cat === 'Condones'){
+      return [{key:'variedad', label:'Variedad', options:['Clásico','Placer extra','Sabores']}];
+    }
+    return [];
+  }
+
+  function variantKey(options){
+    return Object.keys(options).sort().map(k => `${k}=${options[k]}`).join('|');
+  }
+
+  function cartKey(id, options={}){
+    return `${id}::${variantKey(options)}`;
+  }
+
+  function addToCart(id, options={}){
+    const key = cartKey(id, options);
+    cart[key] = (cart[key] || 0) + 1;
     renderCart();
   }
-  function changeQty(id, delta){
-    cart[id] = (cart[id]||0) + delta;
-    if(cart[id] <= 0) delete cart[id];
+
+  function changeQty(key, delta){
+    cart[key] = (cart[key]||0) + delta;
+    if(cart[key] <= 0) delete cart[key];
     renderCart();
   }
-  function removeItem(id){ delete cart[id]; renderCart(); }
+
+  function removeItem(key){ delete cart[key]; renderCart(); }
 
   function cartEntries(){
-    return Object.entries(cart).map(([id,qty]) => ({...PRODUCTS.find(p=>p.id==id), qty}));
+    return Object.entries(cart).map(([key,qty]) => {
+      const [idText, variantText=''] = key.split('::');
+      const p = PRODUCTS.find(x => x.id == idText);
+      if(!p) return null;
+      const variants = {};
+      if(variantText){
+        variantText.split('|').forEach(part => {
+          const i = part.indexOf('=');
+          if(i > -1) variants[part.slice(0,i)] = part.slice(i+1);
+        });
+      }
+      return {...p, key, qty, variants};
+    }).filter(Boolean);
+  }
+  function variantText(i){
+    const labels = {talla:'Talla', sabor:'Sabor', aroma:'Aroma', color:'Color', variedad:'Variedad'};
+    return Object.entries(i.variants || {}).map(([k,v]) => `${labels[k] || k}: ${v}`).join(' · ');
   }
   function subtotal(){ return cartEntries().reduce((s,i)=>s + i.price*i.qty, 0); }
   function pieceCount(){ return cartEntries().reduce((s,i)=>s + i.qty, 0); }
@@ -1393,12 +1479,13 @@
           <div class="line-info">
             <div class="name">${i.name}</div>
             <div class="unit">${money(i.price)} c/u</div>
+            ${variantText(i) ? `<div class="line-options">${variantText(i)}</div>` : ''}
             <div class="line-qty">
-              <button class="qty-btn" onclick="changeQty(${i.id},-1)">−</button>
+              <button class="qty-btn" onclick="changeQty('${i.key.replace(/'/g, "\\'")}',-1)">−</button>
               <span>${i.qty}</span>
-              <button class="qty-btn" onclick="changeQty(${i.id},1)">+</button>
+              <button class="qty-btn" onclick="changeQty('${i.key.replace(/'/g, "\\'")}',1)">+</button>
             </div>
-            <button class="line-remove" onclick="removeItem(${i.id})">Quitar</button>
+            <button class="line-remove" onclick="removeItem('${i.key.replace(/'/g, "\\'")}')">Quitar</button>
           </div>
           <div class="line-total">${money(i.price*i.qty)}</div>
         </div>
@@ -1422,83 +1509,6 @@
     }
   }
 
-  /* ---------------- DRAWER / MODAL CONTROL ---------------- */
-  function openDrawer(){ document.getElementById('drawer').classList.add('show'); document.getElementById('overlay').classList.add('show'); }
-  function closeDrawer(){ document.getElementById('drawer').classList.remove('show'); document.getElementById('overlay').classList.remove('show'); }
-  function openCheckout(){
-    if(pieceCount() === 0) return;
-    renderCheckoutSummary();
-    document.getElementById('drawer').classList.remove('show');
-    document.getElementById('modal').classList.add('show');
-    document.getElementById('overlay').classList.add('show');
-  }
-  function closeAll(){
-    document.getElementById('drawer').classList.remove('show');
-    document.getElementById('modal').classList.remove('show');
-    document.getElementById('categoryModal').classList.remove('show');
-    document.getElementById('termsModal').classList.remove('show');
-    document.getElementById('privacyModal').classList.remove('show');
-    document.getElementById('productModal').classList.remove('show');
-    document.getElementById('overlay').classList.remove('show');
-    document.getElementById('checkoutView').classList.remove('hidden');
-    document.getElementById('successView').classList.add('hidden');
-    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-    if(chipsRow.firstElementChild) chipsRow.firstElementChild.classList.add('active');
-    document.getElementById('catDropdownLabel').textContent = 'Todas las categorías';
-  }
-  function openTerms(){
-    document.getElementById('termsModal').classList.add('show');
-    document.getElementById('overlay').classList.add('show');
-  }
-  function openPrivacy(){
-    document.getElementById('privacyModal').classList.add('show');
-    document.getElementById('overlay').classList.add('show');
-  }
-
-  function renderCheckoutSummary(){
-    const items = cartEntries();
-    document.getElementById('checkoutSummary').innerHTML = `
-      ${items.map(i => `<div class="summary-line"><span>${i.name} × ${i.qty}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
-      <div class="summary-line"><span>Envío</span><span>${shippingCost()===0?'Gratis':money(shippingCost())}</span></div>
-      <div class="summary-line total"><span>Total</span><span>${money(total())}</span></div>
-    `;
-  }
-
-  /* ---------------- ENTREGA / PAGO TOGGLES ---------------- */
-  function setEntrega(v){
-    entrega = v;
-    document.getElementById('choiceDomicilio').classList.toggle('active', v==='domicilio');
-    document.getElementById('choiceSucursal').classList.toggle('active', v==='sucursal');
-    document.getElementById('domicilioFields').classList.toggle('hidden', v!=='domicilio');
-    document.getElementById('sucursalFields').classList.toggle('hidden', v!=='sucursal');
-    renderCheckoutSummary();
-    renderPagoDetail();
-  }
-  function setPago(v){
-    pago = v;
-    document.getElementById('choiceTransferencia').classList.toggle('active', v==='transferencia');
-    document.getElementById('choiceEfectivo').classList.toggle('active', v==='efectivo');
-    document.getElementById('transferenciaDetail').classList.toggle('hidden', v!=='transferencia');
-    document.getElementById('efectivoDetail').classList.toggle('hidden', v!=='efectivo');
-    renderPagoDetail();
-  }
-  function renderPagoDetail(){
-    const ef = document.getElementById('efectivoDetail');
-    ef.innerHTML = entrega === 'domicilio'
-      ? 'Pagas en <b>efectivo</b> directo al mensajero cuando recibas tu pedido en domicilio. Lleva el monto exacto si es posible.'
-      : 'Pagas en <b>efectivo</b> en caja al recoger tu pedido en la sucursal elegida.';
-  }
-
-  /* ---------------- MAPA (sin necesidad de API key) ---------------- */
-  function updateMap(){
-    const street = document.getElementById('fStreet').value;
-    const colonia = document.getElementById('fColonia').value;
-    const city = document.getElementById('fCity').value || 'México';
-    const query = encodeURIComponent(`${street} ${colonia} ${city}`.trim());
-    if(query.length > 3){
-      document.getElementById('mapFrame').src = `https://maps.google.com/maps?q=${query}&z=15&output=embed`;
-    }
-  }
   function useMyLocation(){
     if(!navigator.geolocation){ alert('Tu navegador no permite compartir ubicación.'); return; }
     navigator.geolocation.getCurrentPosition(pos => {
@@ -1534,9 +1544,10 @@
   // Obtener productos del carrito antes de vaciarlo
   const items = cartEntries();
 
-  const productosWhatsApp = items.map(i =>
-    `• ${i.name} x${i.qty} — ${money(i.price * i.qty)}`
-  ).join('\n');
+  const productosWhatsApp = items.map(i => {
+    const variante = variantText(i);
+    return `• ${i.name} x${i.qty}${variante ? ` — ${variante}` : ''} — ${money(i.price * i.qty)}`;
+  }).join('\n');
 
   // Datos del cliente
   let nombre, telefono, correo, direccion;
